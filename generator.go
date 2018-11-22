@@ -34,7 +34,7 @@ type Generator struct {
 	sfile *tsdb.SeriesFile
 }
 
-func (g *Generator) Run(ctx context.Context, database, shardPath string, groups []meta.ShardGroupInfo, gens [][]SeriesGenerator) (err error) {
+func (g *Generator) Run(ctx context.Context, database, shardPath string, groups []meta.ShardGroupInfo, gens [][][]SeriesGenerator) (err error) {
 	limit := make(chan struct{}, g.Concurrency)
 	for i := 0; i < g.Concurrency; i++ {
 		limit <- struct{}{}
@@ -135,7 +135,7 @@ func (g *Generator) Run(ctx context.Context, database, shardPath string, groups 
 // seriesBatchSize specifies the number of series keys passed to the index.
 const seriesBatchSize = 1000
 
-func (g *Generator) writeShard(idx seriesIndex, sgs []SeriesGenerator, id uint64, path string) error {
+func (g *Generator) writeShard(idx seriesIndex, sgs [][]SeriesGenerator, id uint64, path string) error {
 	sw := newShardWriter(id, path)
 	defer sw.Close()
 
@@ -145,49 +145,51 @@ func (g *Generator) writeShard(idx seriesIndex, sgs []SeriesGenerator, id uint64
 		tags  []models.Tags
 	)
 
-loop:
-	for {
-		written := false
-		for _, sg := range sgs {
-			if sg.Next() {
-				key := sg.Key()
+	for _, mgs := range sgs {
+	loop:
+		for {
+			written := false
+			for _, sg := range mgs {
+				if sg.Next() {
+					key := sg.Key()
+					//fmt.Printf("Writing key: %s\n", key)
+					seriesKey, _ := tsm1.SeriesAndFieldFromCompositeKey(key)
+					keys = append(keys, seriesKey)
 
-				seriesKey, _ := tsm1.SeriesAndFieldFromCompositeKey(key)
-				keys = append(keys, seriesKey)
+					name, tag := models.ParseKeyBytes(seriesKey)
+					names = append(names, name)
+					tags = append(tags, tag)
 
-				name, tag := models.ParseKeyBytes(seriesKey)
-				names = append(names, name)
-				tags = append(tags, tag)
+					if len(keys) == seriesBatchSize {
+						if err := idx.CreateSeriesListIfNotExists(keys, names, tags); err != nil {
+							return err
+						}
+						keys = keys[:0]
+						names = names[:0]
+						tags = tags[:0]
+					}
 
-				if len(keys) == seriesBatchSize {
+					vg := sg.ValuesGenerator()
+
+					for vg.Next() {
+						sw.Write(key, vg.Values())
+					}
+					if err := sw.Err(); err != nil {
+						return err
+					}
+
+					written = true
+				}
+
+				if len(keys) > seriesBatchSize {
 					if err := idx.CreateSeriesListIfNotExists(keys, names, tags); err != nil {
 						return err
 					}
-					keys = keys[:0]
-					names = names[:0]
-					tags = tags[:0]
-				}
-
-				vg := sg.ValuesGenerator()
-
-				for vg.Next() {
-					sw.Write(key, vg.Values())
-				}
-				if err := sw.Err(); err != nil {
-					return err
-				}
-
-				written = true
-			}
-
-			if len(keys) > seriesBatchSize {
-				if err := idx.CreateSeriesListIfNotExists(keys, names, tags); err != nil {
-					return err
 				}
 			}
-		}
-		if !written {
-			break loop
+			if !written {
+				break loop
+			}
 		}
 	}
 	return nil
