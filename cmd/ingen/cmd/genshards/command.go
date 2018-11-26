@@ -3,9 +3,11 @@ package genshards
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -32,6 +34,7 @@ type command struct {
 	Tags                    string
 	PointsPerSeriesPerShard int
 	Fields                  int
+	CpuProfileFile          string
 }
 
 func New() *cobra.Command {
@@ -57,11 +60,22 @@ func New() *cobra.Command {
 	fs.IntVar(&o.PointsPerSeriesPerShard, "p", 100, "Points per series per shard")
 	fs.IntVar(&o.Fields, "f", 1, "Fields per point")
 	fs.IntVar(&o.Measurements, "m", 1, "Number of measurements")
+	fs.StringVar(&o.CpuProfileFile, "cpu-profile", "", "Write cpu profile to `file`")
 
 	return cmd
 }
 
 func (cmd *command) Run(_ *cobra.Command, args []string) error {
+	if cmd.CpuProfileFile != "" {
+		f, err := os.Create(cmd.CpuProfileFile)
+		if err != nil {
+			log.Fatal("could not create CPU profile: ", err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
 	db, gens, err := cmd.processOptions()
 	if err != nil {
 		return err
