@@ -8,6 +8,14 @@ import (
 	"github.com/influxdata/influxdb/tsdb/engine/tsm1"
 )
 
+// Unsynchronized random source
+var localRand = rand.New(rand.NewSource(1))
+
+// Seed uses the provided seed value to initialize the generator to a deterministic state.
+func Seed(seed int64) {
+	localRand.Seed(seed)
+}
+
 type IntegerConstantValuesSequence struct {
 	buf   tsm1.Values
 	vals  tsm1.Values
@@ -140,8 +148,8 @@ func (g *FloatRandomValuesSequence) Next() bool {
 	g.vals = g.buf[:c]
 	count := 0
 	for range g.vals {
-		if !(g.state.sparse && rand.Intn(10) > 7) {
-			g.vals[count] = tsm1.NewFloatValue(g.t, rand.Float64()*g.state.scale)
+		if !(g.state.sparse && localRand.Intn(10) > 7) {
+			g.vals[count] = tsm1.NewFloatValue(g.t, localRand.Float64()*g.state.scale)
 			count++
 		}
 		g.t += g.state.d
@@ -192,8 +200,8 @@ func (g *IntegerRandomValuesSequence) Next() bool {
 	g.vals = g.buf[:c]
 	count := 0
 	for range g.vals {
-		if !(g.state.sparse && rand.Intn(10) > 7) {
-			g.vals[count] = tsm1.NewIntegerValue(g.t, rand.Int63n(g.state.max))
+		if !(g.state.sparse && localRand.Intn(10) > 7) {
+			g.vals[count] = tsm1.NewIntegerValue(g.t, localRand.Int63n(g.state.max))
 			count++
 		}
 		g.t += g.state.d

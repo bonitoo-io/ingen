@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
 	"os"
 	"runtime/pprof"
 	"strconv"
@@ -155,7 +154,7 @@ func (cmd *command) processOptions() (db *Database, gens [][][]ingen.SeriesGener
 	mp.Fprintf(tw, "End time\t%s\n", cfg.EndTime())
 	tw.Flush()
 
-	rand.Seed(123)
+	gen.Seed(123)
 
 	if cmd.PrintOnly {
 		return nil, nil, nil
